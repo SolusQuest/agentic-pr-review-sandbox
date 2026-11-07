@@ -1,2 +1,2 @@
 import { config } from './config';
-export const timeout = config.timeoutMs || 3000;
+export const timeout = config.timeoutMs ?? 3000;
