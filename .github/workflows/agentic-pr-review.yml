@@ -1,44 +1,53 @@
-name: Agentic PR Review
-
+name: APR original runtime TEST_ONLY preview
 on:
   workflow_dispatch:
     inputs:
       pr-number:
-        description: Same-repository pull request number
-        required: true
-        type: string
-      state-mode:
-        description: Use accepted state or explicitly start a new epoch
-        required: true
-        default: auto
         type: choice
+        required: true
         options:
-          - auto
-          - reset
-
-permissions: {}
-
+          - '3'
+      request:
+        type: string
+        required: true
+permissions:
+  contents: read
+  actions: read
+  packages: read
+  issues: write
+  pull-requests: write
 concurrency:
-  group: agentic-pr-review-r4-${{ github.repository_id }}-pr-${{ github.event.workflow_run.pull_requests[0].number || inputs.pr-number }}
+  group: apr-test-only-original-runtime-${{ github.repository_id }}-pr-3
   cancel-in-progress: false
-
 jobs:
   review:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      actions: write
-      contents: read
-      pull-requests: write
+    timeout-minutes: 360
     steps:
-      - id: review
-        uses: SolusQuest/agentic-pr-review/.github/actions/agentic-pr-review@938a9a3372925b856245477f619beb7b009d1c87
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          provider-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
-          state-key: ${{ secrets.AGENTIC_PR_REVIEW_STATE_KEY }}
-          previous-state-key: ${{ secrets.AGENTIC_PR_REVIEW_PREVIOUS_STATE_KEY || '' }}
-          config-path: .github/agentic-pr-review.json
-          pr-number: ${{ inputs.pr-number }}
-          state-mode: ${{ inputs.state-mode }}
+          repository: SolusQuest/agentic-pr-review
+          ref: 351a755741674eef66ccda324a16a78d3a203bbe
+          path: control
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1
+        with:
+          dotnet-version: '10.0.109'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Install public locked tooling
+        working-directory: control
+        run: npm ci
+      - name: Install fixed isolation prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iproute2 openssl strace
+      - name: TEST_ONLY original runtime bounded preview
+        working-directory: control
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AGENTIC_PR_REVIEW_STATE_KEY: ${{ secrets.AGENTIC_PR_REVIEW_STATE_KEY }}
+        run: node tests/distribution/verify-managed-action.mjs --test-only-original-runtime-preview
