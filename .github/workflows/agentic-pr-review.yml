@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: SolusQuest/agentic-pr-review
-          ref: 320989e3f5aa36b200fda361feba211bfdb52c1f
+          ref: d3c4398331549d831c42ff55c4092f6111c069b4
           path: control
           fetch-depth: 0
           persist-credentials: false
