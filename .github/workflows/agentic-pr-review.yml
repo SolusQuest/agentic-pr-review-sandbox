@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: SolusQuest/agentic-pr-review
-          ref: e526f9261be5b908c33de34060119a62a233f983
+          ref: d36c92d73e52ceb905bee1d75c6807272100ae87
           path: control
           fetch-depth: 0
           persist-credentials: false
@@ -73,9 +73,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y iproute2 openssl strace
       - name: TEST_ONLY original runtime bounded preview
-        working-directory: control
+        uses: ./control/.github/actions/original-runtime-preview
         env:
           GITHUB_TOKEN: ${{ github.token }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           AGENTIC_PR_REVIEW_STATE_KEY: ${{ secrets.AGENTIC_PR_REVIEW_STATE_KEY }}
-        run: node tests/distribution/verify-managed-action.mjs --test-only-original-runtime-preview
