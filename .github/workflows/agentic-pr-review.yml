@@ -10,24 +10,25 @@ on:
       request:
         type: string
         required: true
-permissions:
-  contents: read
-  actions: read
-  packages: read
-  issues: write
-  pull-requests: write
+permissions: {}
 concurrency:
   group: apr-test-only-original-runtime-${{ github.repository_id }}-pr-3
   cancel-in-progress: false
 jobs:
   review:
+    permissions:
+      contents: read
+      actions: write
+      packages: read
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           repository: SolusQuest/agentic-pr-review
-          ref: 983586b82daf005f8d0f8ba01f6ed19d5376c7a9
+          ref: e90054fb37fd382c3580e9f8aa5ab05b0160b01c
           path: control
           fetch-depth: 0
           persist-credentials: false
