@@ -1,0 +1,107 @@
+name: R7 provider Chat transport probe
+on:
+  workflow_dispatch:
+    inputs:
+      expected-sandbox-sha:
+        type: string
+        required: true
+permissions: {}
+concurrency:
+  group: r7-provider-chat-probe-sandbox-1383960589
+  cancel-in-progress: false
+jobs:
+  check:
+    if: ${{ github.repository == 'SolusQuest/agentic-pr-review-sandbox' && github.repository_id == '1383960589' && github.actor_id == '16307884' && github.triggering_actor == github.actor && github.run_attempt == 1 && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.sha == github.workflow_sha && inputs.expected-sandbox-sha == github.sha }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check a single synthetic DeepSeek Chat response
+        shell: bash
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python3 -I - <<'PY'
+          import json
+          import os
+          import signal
+          from http.client import HTTPException
+          from urllib.error import HTTPError, URLError
+          from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+
+          class Deadline(Exception):
+              pass
+
+          def stop(_number, _frame):
+              raise Deadline()
+
+          def outcome():
+              key = os.environ.pop('DEEPSEEK_API_KEY', '')
+              if not key or any(ord(char) < 33 or ord(char) > 126 for char in key):
+                  return 'credential-unavailable'
+              body = {
+                  'model': 'deepseek-flash', 'stream': False,
+                  'thinking': {'type': 'enabled'}, 'reasoning_effort': 'high',
+                  'max_tokens': 1024,
+                  'messages': [
+                      {'role': 'system', 'content': 'This is a synthetic transport test. Answer the question in one short sentence.'},
+                      {'role': 'user', 'content': 'What is 2 plus 2?'}],
+                  'tools': [{'type': 'function', 'function': {
+                      'name': 'synthetic_reference', 'description': 'Look up an example number if needed.',
+                      'parameters': {'type': 'object', 'properties': {'key': {'type': 'string'}},
+                                     'required': ['key'], 'additionalProperties': False}}}],
+              }
+              req = Request('https://api.deepseek.com/chat/completions', method='POST',
+                            data=json.dumps(body, separators=(',', ':')).encode(),
+                            headers={'Authorization': 'Bearer ' + key, 'Accept': 'application/json',
+                                     'Content-Type': 'application/json'})
+              headers_arrived = False
+              signal.signal(signal.SIGALRM, stop)
+              signal.alarm(45)
+              try:
+                  with build_opener(ProxyHandler({}), NoRedirect()).open(req, timeout=45) as response:
+                      headers_arrived = True
+                      if response.status != 200:
+                          return 'unexpected-http'
+                      if response.headers.get_content_type() != 'application/json':
+                          return 'http-ok-media-type-drift'
+                      payload = response.read(524289)
+                      if len(payload) > 524288:
+                          return 'http-ok-response-size'
+                      result = json.loads(payload)
+                  if not isinstance(result, dict):
+                      return 'http-ok-invalid-response'
+                  if result.get('model') != 'deepseek-flash':
+                      return 'http-ok-model-drift'
+                  choices = result.get('choices')
+                  if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+                      return 'http-ok-invalid-response'
+                  finish = choices[0].get('finish_reason')
+                  message = choices[0].get('message')
+                  if not isinstance(message, dict):
+                      return 'http-ok-invalid-response'
+                  if finish == 'stop' and isinstance(message.get('content'), str) and message['content']:
+                      return 'http-ok-stop'
+                  if finish == 'tool_calls' and isinstance(message.get('tool_calls'), list) and message['tool_calls']:
+                      return 'http-ok-tools'
+                  return 'http-ok-' + finish.replace('_', '-') if finish in ('length','content_filter','insufficient_system_resource','aborted') else 'http-ok-invalid-response'
+              except HTTPError as exc:
+                  code = exc.code
+                  exc.close()
+                  return {400: 'invalid-request', 401: 'authentication-refused', 402: 'insufficient-balance',
+                          403: 'access-refused', 422: 'invalid-request', 429: 'rate-limited'}.get(
+                              code, 'service-unavailable' if 500 <= code < 600 else 'unexpected-http')
+              except (Deadline, TimeoutError):
+                  return 'http-ok-body-timeout' if headers_arrived else 'transport-timeout'
+              except (URLError, OSError, HTTPException):
+                  return 'http-ok-body-transport' if headers_arrived else 'transport-unavailable'
+              except (UnicodeError, ValueError, TypeError):
+                  return 'http-ok-invalid-response' if headers_arrived else 'invalid-request'
+              finally:
+                  signal.alarm(0)
+
+          print('APR_TEST_ONLY_PROVIDER_CHAT ' + outcome())
+          PY
